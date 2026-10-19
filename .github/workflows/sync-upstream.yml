@@ -98,18 +98,19 @@ jobs:
       - name: Verify pi-extras still loads
         if: |
           (steps.ff.outputs.mode == 'fast-forward' || steps.merge.outputs.mode == 'merge')
+        env:
+          # The selfcheck shells out to a real pi binary, which comes from npm.
+          # Without credentials it can still answer get_commands, so no secrets
+          # are needed here.
+          NPM_CONFIG_FUND: "false"
         run: |
           # A merge can be textually clean and still break the extras, e.g. when
           # upstream renames a registration API. Fail loudly here rather than
           # leaving a silently broken fork.
           set -euo pipefail
-          node --version
-          bash -n pi-extras/install.sh
-          bash -n pi-extras/install-remote.sh
-          for f in pi-extras/extensions/*.ts; do
-            echo "checking ${f}"
-            node --experimental-strip-types --check "$f"
-          done
+          npm install --global --no-fund --no-audit @earendil-works/pi-coding-agent@latest
+          pi --version
+          bash pi-extras/selfcheck.sh
 
       - name: Open or update a conflict issue
         if: steps.merge.outputs.mode == 'conflict'

@@ -22,7 +22,9 @@
 set -euo pipefail
 
 REPO_URL=${PI_EXTRAS_REPO:-https://github.com/Micuks/pi.git}
-REF=main
+# Default to the pinned tag so a first install is reproducible; --ref main tracks
+# the branch. The tag is moved forward when pi-extras changes.
+REF=${PI_EXTRAS_REF:-pi-extras-v1}
 SRC=${PI_EXTRAS_SRC:-$HOME/.pi/pi-extras-src}
 DRY_RUN=0
 UPDATE_ONLY=0

@@ -61,17 +61,26 @@ Markers `/loop` understands, emitted by the model in its reply:
 ### One command (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Micuks/pi/main/pi-extras/install-remote.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Micuks/pi/pi-extras-v1/pi-extras/install-remote.sh | bash
 ```
 
 This sparse-clones only `pi-extras/` into `~/.pi/pi-extras-src` and symlinks the
 resources into `~/.pi/agent`, then prints the new commands. Restart pi or run
 `/reload`.
 
+The URL pins the `pi-extras-v1` tag rather than `main`. Two reasons: a tag is
+reproducible, and `raw.githubusercontent.com` caches by branch name, so a fresh
+commit to `main` can serve stale bytes for a while. To track `main` deliberately:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Micuks/pi/main/pi-extras/install-remote.sh \
+  | bash -s -- --ref main
+```
+
 Already have a checkout? Update and reinstall in place:
 
 ```bash
-~/.pi/pi-extras-src/pi-extras/install-remote.sh --update
+~/.pi/pi-extras-src/pi-extras/install-remote.sh --update --ref main
 ```
 
 ### From a clone

@@ -16,7 +16,7 @@
 > subagents, todos, handoff, bookmarks. Install them with one command:
 >
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/Micuks/pi/main/pi-extras/install-remote.sh | bash
+> curl -fsSL https://raw.githubusercontent.com/Micuks/pi/pi-extras-v1/pi-extras/install-remote.sh | bash
 > ```
 >
 > See [pi-extras/README.md](pi-extras/README.md) for details. Everything below is
