@@ -120,7 +120,7 @@ else
         fail "install.sh into a temp agent dir"
     fi
 
-    WANT="side goal cron loop todos handoff bookmark implement scout-and-plan implement-and-review"
+    WANT="side btw goal cron loop todos handoff bookmark implement scout-and-plan implement-and-review"
     GOT=$(PI_CODING_AGENT_DIR="$TMP_AGENT" node -e '
 const { spawn } = require("node:child_process");
 const proc = spawn("pi", ["--mode","rpc","--no-session"], { stdio: ["pipe","pipe","pipe"] });

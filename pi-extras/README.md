@@ -18,7 +18,7 @@ API, so upstream changes that keep the API stable do not affect these files.
 
 | Command | What it does | Source |
 |---|---|---|
-| `/side <question>` | Ask about the current session **without derailing it** — runs in a separate `pi` process seeded from the transcript, answer shown as a transient message. | `extensions/side.ts` |
+| `/side <question>`<br>`/btw <question>` | Ask about the current session **without derailing it** — runs in a separate `pi` process seeded from the transcript, answer shown as a transient message. `/btw` is an alias; it reports under whichever name you typed. | `extensions/side.ts` |
 | `/goal <objective>` | A standing objective stored as a session entry and re-injected into every run, so it survives compaction. | `extensions/goal.ts` |
 | `/cron add every 10m …` | Schedule a prompt into this session on an interval, or daily at `HH:MM`. | `extensions/cron.ts` |
 | `/loop [10m] <prompt>` | Re-submit a prompt: fixed interval, or **self-paced** where the model signals `[loop-next: 5m]` / `[loop-done]`. Supports `--max N` and `--until <condition>`. | `extensions/loop.ts` |
@@ -33,11 +33,25 @@ Plus the upstream subagent workflows: `/implement`, `/scout-and-plan`,
 ### `/side` vs subagent
 
 `/side` is one-shot and read-mostly: it answers a question about what you have
-already done, and its output never becomes part of the main transcript.
+already done, and its output never becomes part of the main transcript. `/btw`
+is the same command under the name that usually precedes this kind of question.
 The `subagent` tool is for doing work: it has its own tools, runs to completion,
 and its result comes back as a tool result. Use `/side` to ask "what did that
 error mean, again?" without a permanent turn; use a subagent when you want the
 work actually done.
+
+### `/side` inherits your provider
+
+The side process is spawned with the parent session's provider/model. If the
+active provider rejects the request, `/side` reports that plainly:
+
+```text
+side: side failed: The model refused to complete the request (tokenverse/claude-opus-5-5)
+```
+
+It does not silently fall back to another provider — a side answer from a
+different model than the one you are talking to would be more confusing than an
+error.
 
 ### `/loop` vs `/cron`
 
