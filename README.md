@@ -10,6 +10,18 @@
 
 > New issues and PRs from new contributors are auto-closed by default. Maintainers review auto-closed issues daily. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+> **This is a personal fork** of [earendil-works/pi](https://github.com/earendil-works/pi).
+> It tracks upstream automatically and adds a [`pi-extras/`](pi-extras/) directory with
+> Codex/Claude-Code-style workflow extensions — `/side`, `/goal`, `/cron`, `/loop`,
+> subagents, todos, handoff, bookmarks. Install them with one command:
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/Micuks/pi/main/pi-extras/install-remote.sh | bash
+> ```
+>
+> See [pi-extras/README.md](pi-extras/README.md) for details. Everything below is
+> upstream's documentation.
+
 # Pi
 
 Pi is a minimal, extensible agent harness that you can make your own.

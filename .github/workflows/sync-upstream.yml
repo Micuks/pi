@@ -1,0 +1,161 @@
+name: Sync with upstream
+
+# Keep this fork current with earendil-works/pi.
+#
+# Runs on a schedule, and on demand. Fast-forwards when the fork has no local
+# commits; otherwise merges upstream into the fork branch. A merge conflict is
+# NOT force-resolved: this fork exists to stay close to upstream while adding a
+# self-contained pi-extras/ directory plus a handful of small patches, so a
+# conflict almost always means upstream touched something the patches rely on and
+# a human should look. The job therefore stops, opens/updates a tracking issue,
+# and leaves the branch untouched.
+
+on:
+  schedule:
+    # Every 6 hours. Upstream releases frequently; hourly would spend most of its
+    # life with nothing to do.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out fork
+        uses: actions/checkout@v4
+        with:
+          # GITHUB_TOKEN is enough to push back to this same repository, and a
+          # GITHUB_TOKEN push does not re-trigger workflows, so the sync cannot
+          # loop on itself.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # The bundle check below uses `node --experimental-strip-types`, which needs
+      # Node 22.6+. The runner default is older, so pin it explicitly rather than
+      # letting the check silently pass on an unsupported runtime.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/earendil-works/pi.git
+          git fetch --no-tags upstream main
+
+      - name: Report how far behind
+        id: behind
+        run: |
+          behind=$(git rev-list --count HEAD..upstream/main)
+          ahead=$(git rev-list --count upstream/main..HEAD)
+          echo "behind=${behind}" >> "$GITHUB_OUTPUT"
+          echo "ahead=${ahead}" >> "$GITHUB_OUTPUT"
+          echo "Fork is ${behind} commit(s) behind upstream, ${ahead} ahead."
+
+      - name: Fast-forward when there is nothing local to preserve
+        id: ff
+        if: steps.behind.outputs.behind != '0' && steps.behind.outputs.ahead == '0'
+        run: |
+          git merge --ff-only upstream/main
+          echo "mode=fast-forward" >> "$GITHUB_OUTPUT"
+
+      - name: Merge upstream when the fork has local commits
+        id: merge
+        if: steps.behind.outputs.behind != '0' && steps.behind.outputs.ahead != '0'
+        run: |
+          # -X ours would silently drop upstream changes inside conflicting hunks,
+          # which is exactly the wrong default for a tracking fork. Merge plainly
+          # and let a conflict stop the job.
+          if git merge --no-edit upstream/main; then
+            echo "mode=merge" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "mode=conflict" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+      - name: Push when the merge was clean
+        if: |
+          (steps.ff.outputs.mode == 'fast-forward' || steps.merge.outputs.mode == 'merge')
+        run: |
+          git push origin HEAD:${{ github.event.repository.default_branch }}
+
+      - name: Verify pi-extras still loads
+        if: |
+          (steps.ff.outputs.mode == 'fast-forward' || steps.merge.outputs.mode == 'merge')
+        run: |
+          # A merge can be textually clean and still break the extras, e.g. when
+          # upstream renames a registration API. Fail loudly here rather than
+          # leaving a silently broken fork.
+          set -euo pipefail
+          node --version
+          bash -n pi-extras/install.sh
+          bash -n pi-extras/install-remote.sh
+          for f in pi-extras/extensions/*.ts; do
+            echo "checking ${f}"
+            node --experimental-strip-types --check "$f"
+          done
+
+      - name: Open or update a conflict issue
+        if: steps.merge.outputs.mode == 'conflict'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="Upstream sync needs a manual merge"
+          body=$(cat <<'EOF'
+          The scheduled sync could not merge `earendil-works/pi` into this fork
+          because of a conflict. The fork branch was left untouched.
+
+          Resolve locally:
+
+          ```bash
+          git remote add upstream https://github.com/earendil-works/pi.git   # once
+          git fetch upstream main
+          git merge upstream/main          # resolve the conflicts
+          git push origin main
+          ```
+
+          Most conflicts will be in the small patched files. `pi-extras/` is
+          additive and should not conflict; if it does, upstream likely moved a
+          registration API the extras depend on — re-check
+          `pi-extras/extensions/` against `packages/coding-agent/docs/extensions.md`
+          after resolving.
+          EOF
+          )
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Still conflicting as of $(date -u +%Y-%m-%dT%H:%M:%SZ)."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
+
+      - name: Close the conflict issue once syncing works again
+        if: |
+          (steps.ff.outputs.mode == 'fast-forward' || steps.merge.outputs.mode == 'merge')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="Upstream sync needs a manual merge"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" \
+              --comment "Sync succeeded on $(date -u +%Y-%m-%dT%H:%M:%SZ); closing."
+          fi
