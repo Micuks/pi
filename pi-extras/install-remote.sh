@@ -67,6 +67,10 @@ if [ ! -f "$INSTALL_SH" ]; then
 fi
 chmod +x "$INSTALL_SH"
 
-INSTALL_ARGS=()
-[ "$DRY_RUN" = 1 ] && INSTALL_ARGS+=(--dry-run)
-run bash "$INSTALL_SH" "${INSTALL_ARGS[@]}"
+# `set -u` makes "${arr[@]}" on an empty array an unbound-variable error on older
+# bash (macOS ships 3.2). Build the argument list explicitly instead.
+if [ "$DRY_RUN" = 1 ]; then
+    run bash "$INSTALL_SH" --dry-run
+else
+    run bash "$INSTALL_SH"
+fi
