@@ -48,7 +48,10 @@ run() {
 install_one() {
     local src=$1 dst=$2
     if [ "$MODE" = copy ]; then
-        run cp -f "$src" "$dst"
+        # -R so the subagent/ directory copies; -f is not enough on its own and
+        # cp would otherwise fail with "is a directory (not copied)" and leave the
+        # install half-finished under `set -e`.
+        run cp -Rf "$src" "$dst"
     else
         run ln -sfn "$src" "$dst"
     fi
@@ -67,19 +70,25 @@ if [ "$UNINSTALL" = 1 ]; then
     for kind in extensions agents prompts; do
         target="${AGENT_DIR}/${kind}"
         [ -f "${target}/${MANIFEST}" ] || continue
-        while IFS= read -r name; do
+        # Manifest lines are "<mode>\t<name>". The recorded mode matters: a file
+        # may have been installed as a symlink and then replaced by the user with
+        # a real file of the same name. Deleting that would destroy their work, so
+        # symlink mode only ever removes links that still point at this checkout.
+        while IFS=$'\t' read -r rec_mode name; do
             [ -n "$name" ] || continue
             path="${target}/${name}"
             if [ -L "$path" ]; then
                 dest=$(readlink "$path")
                 case "$dest" in
                     "${EXTRAS_DIR}"/*) run rm -f "$path" ;;
-                    *) echo "  skip ${path}: link points elsewhere (${dest})" ;;
+                    *) echo "  keep ${name}: link points elsewhere (${dest})" ;;
                 esac
-            elif [ -e "$path" ]; then
-                # Copied install: the manifest is the only evidence of ownership,
-                # so removing it is correct here.
+            elif [ "$rec_mode" = copy ] && [ -d "$path" ]; then
+                run rm -rf "$path"
+            elif [ "$rec_mode" = copy ] && [ -e "$path" ]; then
                 run rm -f "$path"
+            elif [ -e "$path" ]; then
+                echo "  keep ${name}: not a link into ${EXTRAS_DIR} (replaced by you?)"
             fi
         done < "${target}/${MANIFEST}"
         run rm -f "${target}/${MANIFEST}"
@@ -103,11 +112,11 @@ mkdir -p "${AGENT_DIR}/extensions"
 while IFS= read -r src; do
     name=$(basename "$src")
     install_one "$src" "${AGENT_DIR}/extensions/${name}"
-    printf '%s\n' "$name" >> "${AGENT_DIR}/extensions/${MANIFEST}.tmp"
+    printf '%s\t%s\n' "$MODE" "$name" >> "${AGENT_DIR}/extensions/${MANIFEST}.tmp"
 done < <(resource_files "${EXTRAS_DIR}/extensions" '*.ts')
 if [ -d "${EXTRAS_DIR}/extensions/subagent" ]; then
     install_one "${EXTRAS_DIR}/extensions/subagent" "${AGENT_DIR}/extensions/subagent"
-    printf '%s\n' subagent >> "${AGENT_DIR}/extensions/${MANIFEST}.tmp"
+    printf '%s\t%s\n' "$MODE" subagent >> "${AGENT_DIR}/extensions/${MANIFEST}.tmp"
 fi
 
 mkdir -p "${AGENT_DIR}/agents"
@@ -115,7 +124,7 @@ mkdir -p "${AGENT_DIR}/agents"
 while IFS= read -r src; do
     name=$(basename "$src")
     install_one "$src" "${AGENT_DIR}/agents/${name}"
-    printf '%s\n' "$name" >> "${AGENT_DIR}/agents/${MANIFEST}.tmp"
+    printf '%s\t%s\n' "$MODE" "$name" >> "${AGENT_DIR}/agents/${MANIFEST}.tmp"
 done < <(resource_files "${EXTRAS_DIR}/agents" '*.md')
 
 mkdir -p "${AGENT_DIR}/prompts"
@@ -123,7 +132,7 @@ mkdir -p "${AGENT_DIR}/prompts"
 while IFS= read -r src; do
     name=$(basename "$src")
     install_one "$src" "${AGENT_DIR}/prompts/${name}"
-    printf '%s\n' "$name" >> "${AGENT_DIR}/prompts/${MANIFEST}.tmp"
+    printf '%s\t%s\n' "$MODE" "$name" >> "${AGENT_DIR}/prompts/${MANIFEST}.tmp"
 done < <(resource_files "${EXTRAS_DIR}/prompts" '*.md')
 
 if [ "$DRY_RUN" = 0 ]; then

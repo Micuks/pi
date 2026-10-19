@@ -81,6 +81,28 @@ for f in "${EXTRAS_DIR}"/prompts/*.md; do
     fi
 done
 
+echo "== install/uninstall round-trip =="
+RT=$(mktemp -d)
+if bash "${EXTRAS_DIR}/install.sh" --dir "$RT" >/dev/null 2>&1; then
+    n_before=$(find "$RT" -type l | wc -l | tr -d ' ')
+    # Replace one installed link with a real file of the same name: uninstall must
+    # leave it alone, because it is no longer ours.
+    victim="$RT/extensions/side.ts"
+    rm -f "$victim"
+    printf 'export default function mine() {}\n' > "$victim"
+    bash "${EXTRAS_DIR}/install.sh" --dir "$RT" --uninstall >/dev/null 2>&1 || true
+    if [ -f "$victim" ] && [ ! -L "$victim" ]; then
+        pass "uninstall keeps a user-replaced file"
+    else
+        fail "uninstall deleted a user-replaced file"
+    fi
+    n_after=$(find "$RT" -type l | wc -l | tr -d ' ')
+    if [ "$n_after" = 0 ]; then pass "uninstall removed ${n_before} link(s)"; else fail "uninstall left ${n_after} link(s)"; fi
+else
+    fail "install.sh for round-trip"
+fi
+rm -rf "$RT"
+
 echo "== load through a real pi process =="
 if ! command -v pi >/dev/null 2>&1; then
     echo "  skip pi not on PATH"
